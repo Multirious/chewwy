@@ -1,0 +1,17 @@
+[commands.manage]
+smart-decompress-directory = true
+search-file = true
+output-file-action = "decompress-to-output-dir"
+compressed-file-action = "move-to-archive-dir"
+
+[commands.manage.directories]
+search = "search"
+output = "output"
+archive = "archive"
+
+[formats.zip]
+extensions = ["zip"]
+
+[[formats.zip.decompress]]
+path = "unzip"
+args = ["{FILE}", "-d", "{DIR}"]
