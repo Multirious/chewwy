@@ -13,12 +13,27 @@ archive = "archive"
 extensions = ["zip"]
 
 [[formats.zip.decompress]]
+path = "7z"
+args = ["x", "{FILE}", "-o{DIR}"]
+
+[[formats.zip.decompress]]
 path = "unzip"
 args = ["{FILE}", "-d", "{DIR}"]
 
 [formats.rar]
 extensions = ["rar"]
 
+[[formats.zip.decompress]]
+path = "7z"
+args = ["x", "{FILE}", "-o{DIR}"]
+
 [[formats.rar.decompress]]
 path = "unrar"
 args = ["x", "{FILE}", "{DIR}"]
+
+[formats.7z]
+extensions = ["7z"]
+
+[[formats.zip.decompress]]
+path = "7z"
+args = ["x", "{FILE}", "-o{DIR}"]
