@@ -8,6 +8,25 @@ use serde::Deserialize;
 
 pub const FILE_NAME: &str = "cfg.toml";
 
+#[derive(Debug, Error)]
+pub enum LoadCfgError {
+    #[error("invalid cfg {0}")]
+    Invalid(toml::de::Error),
+    #[error("io error {0}")]
+    Io(io::Error),
+}
+
+pub fn load_cfg<P: AsRef<Path>>(cfg_file_path: P) -> Result<Cfg, LoadCfgError> {
+    let content =
+        fs::read_to_string(cfg_file_path).map_err(LoadCfgError::Io)?;
+    let cfg = toml::from_str(&content).map_err(LoadCfgError::Invalid)?;
+    Ok(cfg)
+}
+
+pub fn root_cfg_path<P: AsRef<Path>>(root: P) -> PathBuf {
+    root.as_ref().join(crate::DOT_DIR).join(FILE_NAME)
+}
+
 #[derive(
     Debug,
     Default,
