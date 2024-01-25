@@ -3,10 +3,9 @@ use std::io::Write;
 use chewwy::{
     cfg::{self, Cfg, StructMerge},
     prelude::*,
+    utils,
 };
 use clap::{Parser, Subcommand};
-
-pub const DOT_DIR: &str = ".chewwy";
 
 #[derive(Parser)]
 struct Args {
@@ -26,70 +25,32 @@ enum Command {
 }
 
 #[derive(Debug, Error)]
-enum CfgError {
-    #[error("invalid cfg {0}")]
-    Invalid(toml::de::Error),
-    #[error("io error {0}")]
-    Io(io::Error),
-}
-
-#[derive(Debug, Error)]
 #[error("app error")]
 struct AppError;
-
-fn search_chewwy_root<P: AsRef<Path>>(dir: P) -> io::Result<Option<PathBuf>> {
-    for entry in fs::read_dir(&dir)? {
-        let Ok(entry) = entry else {
-            continue;
-        };
-        let Ok(file_type) = entry.file_type() else {
-            continue;
-        };
-        if !file_type.is_dir() {
-            continue;
-        }
-        let path = entry.path();
-        let Some(name) = path.file_name() else {
-            continue;
-        };
-        if name == DOT_DIR {
-            return Ok(Some(path.parent().unwrap().to_path_buf()));
-        }
-    }
-    // search_chewwy_root()
-    let Some(parent) = dir.as_ref().parent() else {
-        return Ok(None);
-    };
-    search_chewwy_root(parent)
-}
-
-fn chewwy_root_cfg<P: AsRef<Path>>(root: P) -> Result<Cfg, CfgError> {
-    load_cfg(root.as_ref().join(DOT_DIR).join(cfg::FILE_NAME))
-}
-
-fn load_cfg<P: AsRef<Path>>(cfg_file_path: P) -> Result<Cfg, CfgError> {
-    let content = fs::read_to_string(cfg_file_path).map_err(CfgError::Io)?;
-    let cfg = toml::from_str(&content).map_err(CfgError::Invalid)?;
-    Ok(cfg)
-}
 
 fn main() -> StackResult<(), AppError> {
     let args = Args::parse();
 
     let current_dir = env::current_dir().change_context(AppError)?;
     let chewwy_root =
-        search_chewwy_root(current_dir).change_context(AppError)?;
+        chewwy::search_chewwy_root(current_dir).change_context(AppError)?;
 
     let arg_cfg = match args.config_file {
-        Some(c) => Some(load_cfg(c).change_context(AppError)?),
+        Some(c) => Some(cfg::load_cfg(c).change_context(AppError)?),
         None => None,
     };
     let chewwy_root_cfg = match &chewwy_root {
-        Some(chewwy_root) => match chewwy_root_cfg(chewwy_root) {
-            Ok(c) => Some(c),
-            Err(CfgError::Io(e)) if e.kind() == io::ErrorKind::NotFound => None,
-            Err(e) => return Err(e).change_context(AppError),
-        },
+        Some(chewwy_root) => {
+            match cfg::load_cfg(cfg::root_cfg_path(chewwy_root)) {
+                Ok(c) => Some(c),
+                Err(cfg::LoadCfgError::Io(e))
+                    if e.kind() == io::ErrorKind::NotFound =>
+                {
+                    None
+                }
+                Err(e) => return Err(e).change_context(AppError),
+            }
+        }
         None => None,
     };
     let default_cfg = Cfg::default();
@@ -255,11 +216,11 @@ fn command_manage<R: AsRef<Path>, F: AsRef<Path>>(
     if let Some(output_file_dir_path) = output_file_dir_path {
         if *manage_cfg.smart_decompress_directory.c() {
             println!("Unnesting dir");
-            match chewwy::unnest_dir(output_file_dir_path) {
+            match utils::unnest_dir(output_file_dir_path) {
                 Ok(())
-                | Err(chewwy::UnnestDirError::Empty)
-                | Err(chewwy::UnnestDirError::NotNested) => {}
-                Err(chewwy::UnnestDirError::Io(e)) => {
+                | Err(utils::UnnestDirError::Empty)
+                | Err(utils::UnnestDirError::NotNested) => {}
+                Err(utils::UnnestDirError::Io(e)) => {
                     return Err(e)
                         .change_context(CommandManageError)
                         .attach_printable("error unnesting dir");
