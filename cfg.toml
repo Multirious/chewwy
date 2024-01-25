@@ -15,3 +15,10 @@ extensions = ["zip"]
 [[formats.zip.decompress]]
 path = "unzip"
 args = ["{FILE}", "-d", "{DIR}"]
+
+[formats.rar]
+extensions = ["rar"]
+
+[[formats.rar.decompress]]
+path = "unrar"
+args = ["x", "{FILE}", "{DIR}"]
