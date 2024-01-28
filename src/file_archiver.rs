@@ -135,29 +135,127 @@ impl<'cfg> FileArchiver<'cfg> {
         &self,
         file: P,
     ) -> Option<(&String, &Format)> {
-        fn file_extensions<P: AsRef<Path>>(file: &P) -> Option<Vec<&str>> {
-            let file = file.as_ref();
-            let file = file.components().last()?;
-            let file = file.as_os_str().to_str()?;
-            let extensions = file.split('.').skip(1).collect::<Vec<_>>();
-            Some(extensions)
-        }
+        find_format(self.formats, file)
+    }
+}
 
+fn find_format<P: AsRef<Path>>(
+    formats: &HashMap<String, Format>,
+    file: P,
+) -> Option<(&String, &Format)> {
+    fn file_extension_vec<P: AsRef<Path>>(file: &P) -> Option<Vec<&str>> {
         let file = file.as_ref();
-        let extensions = file_extensions(&file)?;
-        self.formats.iter().find(|(_, f)| {
-            'exts: for cfg_ext in f.extensions.c() {
-                for (i, cfg_ext_part) in cfg_ext.split('.').enumerate() {
-                    let Some(ext_part) = extensions.get(i) else {
-                        continue 'exts;
-                    };
-                    if *ext_part != cfg_ext_part {
-                        continue 'exts;
-                    }
-                }
-                return true;
+        let file = file.components().last()?;
+        let file = file.as_os_str().to_str()?;
+        let extensions = file.split('.').skip(1).collect::<Vec<_>>();
+        Some(extensions)
+    }
+
+    let file = file.as_ref();
+    let extension_vec = file_extension_vec(&file)?;
+    let extension_format_cache = ExtensionFormatCache::new(formats);
+    let mut found_format = None;
+    for i in 0..extension_vec.len() {
+        let extension_vec = &extension_vec[i..];
+        let extension = {
+            let mut s = String::new();
+            s.push_str(extension_vec[0]);
+            for ext_part in &extension_vec[1..] {
+                s.push('.');
+                s.push_str(ext_part);
             }
-            false
-        })
+            s
+        };
+        if let Some(format) =
+            extension_format_cache.extension_format.get(&extension)
+        {
+            found_format = Some(format);
+            break;
+        }
+    }
+    found_format.map(|format_name| (*format_name, &formats[*format_name]))
+}
+
+struct ExtensionFormatCache<'a> {
+    extension_format: HashMap<&'a String, &'a String>,
+}
+
+impl<'a> ExtensionFormatCache<'a> {
+    fn new(formats: &'a HashMap<String, Format>) -> Self {
+        let extension_format = formats
+            .iter()
+            .flat_map(|(format_name, format)| {
+                let extensions = format.extensions.c();
+                extensions
+                    .iter()
+                    .map(move |extension| (extension, format_name))
+            })
+            .collect();
+        ExtensionFormatCache { extension_format }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::collections::{HashMap, HashSet};
+
+    fn s(s: &str) -> String {
+        s.to_string()
+    }
+
+    fn c<T>(t: T) -> crate::cfg::Configure<T> {
+        crate::cfg::Configure(Some(t))
+    }
+
+    fn hashset<T, I>(i: I) -> HashSet<T>
+    where
+        T: std::cmp::Eq + std::hash::Hash,
+        I: IntoIterator<Item = T>,
+    {
+        HashSet::from_iter(i)
+    }
+
+    #[test]
+    fn find_format() {
+        use crate::cfg::Format as F;
+        let formats: HashMap<String, F> = HashMap::from_iter([
+            (
+                s("first"),
+                F {
+                    extensions: c(hashset([s("abc")])),
+                    decompress: c(vec![]),
+                },
+            ),
+            (
+                s("second"),
+                F {
+                    extensions: c(hashset([s("abc.def")])),
+                    decompress: c(vec![]),
+                },
+            ),
+            (
+                s("third"),
+                F {
+                    extensions: c(hashset([s("def")])),
+                    decompress: c(vec![]),
+                },
+            ),
+        ]);
+        assert_eq!(
+            Some(&s("first")),
+            super::find_format(&formats, "a_file.abc").map(|a| a.0)
+        );
+        assert_eq!(
+            Some(&s("first")),
+            super::find_format(&formats, "a_file.hiya.abc").map(|a| a.0)
+        );
+        assert_eq!(
+            Some(&s("third")),
+            super::find_format(&formats, "a_file.def").map(|a| a.0)
+        );
+        assert_eq!(
+            Some(&s("second")),
+            super::find_format(&formats, "a_file.abc.def").map(|a| a.0)
+        );
     }
 }
