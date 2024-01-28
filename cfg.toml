@@ -23,7 +23,7 @@ args = ["{FILE}", "-d", "{DIR}"]
 [formats.rar]
 extensions = ["rar"]
 
-[[formats.zip.decompress]]
+[[formats.rar.decompress]]
 path = "7z"
 args = ["x", "{FILE}", "-o{DIR}"]
 
